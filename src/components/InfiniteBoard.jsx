@@ -16,15 +16,15 @@ const renderItem = (value, index) => {
     </div>
 }
 
-const fetchItems = async (pageCursor, itemCountPerScroll) => {
+const fetchItems = async (prevItems, pageCursor, itemCountPerScroll) => {
   const items = generateDumbBoardItems(1000);
 
   const startIdx = (pageCursor - 1) * itemCountPerScroll; 
 
-  return items.slice(
+  return prevItems.concat(items.slice(
     Math.min(startIdx, items.length),
     Math.min(startIdx + itemCountPerScroll, items.length)
-  )
+  ))
 }
 
 const InfiniteBoard = () => {

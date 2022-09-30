@@ -44,9 +44,9 @@ function useInfiniteScroll(
 
     installEvent();
     
-    callback(page, itemCountPerScroll)
+    callback(items, page, itemCountPerScroll)
       .then(value=>{
-        setItems(prev => prev.concat(value));
+        setItems(value);
       })
       .catch(err=>{
         console.log(err)
