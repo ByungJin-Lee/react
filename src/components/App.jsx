@@ -1,12 +1,22 @@
+import { ThemeProvider,createTheme, CssBaseline } from "@mui/material";
 import React from "react";
 
 import InfiniteBoard from "./InfiniteBoard";
 
+const darkTheme = createTheme({
+  palette: {
+    mode: 'dark',
+  },
+});
+
 const App = () => {
 
   let r = <>
-    Hello My App!
-    <InfiniteBoard/>
+    <ThemeProvider theme={darkTheme}>
+      <CssBaseline />
+      Hello My App!
+      <InfiniteBoard/>
+    </ThemeProvider>
   </>
 
   return r;

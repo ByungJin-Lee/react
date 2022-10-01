@@ -9,7 +9,6 @@ body {
 
 #app {
   width: 750px;
-  border: 2px solid #eee; 
 }
 
 .infinite-scroll-con {
@@ -20,18 +19,4 @@ body {
   gap: 8px;
 
   grid-template-columns: repeat(2, 1fr);
-}
-
-.infinite-scroll-con .item {
-  display: flex;
-
-  max-height: 50px;
-  border: 1.5px solid #000;
-  border-radius: 5px;
-  padding: 5px;
-}
-
-.infinite-scroll-con .item img{
-  height: 100%;
-  width: 100%;
 }
