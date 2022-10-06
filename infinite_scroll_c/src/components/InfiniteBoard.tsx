@@ -59,8 +59,6 @@ const InfiniteBoard = () => {
     // 여기는 없어질 로직
     const start = (page - 1) * 50; 
 
-    console.log(start);
-
     const added = collection.slice(start, start + 50) as never[];
     // 여기 까지
 
