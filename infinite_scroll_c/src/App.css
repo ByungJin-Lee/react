@@ -1,0 +1,23 @@
+html, body {
+  min-height: 100vh;
+  scroll-behavior: smooth;
+}
+
+body {
+  display: flex;
+  justify-content: center;
+}
+
+#root, #app {
+  width: 750px;
+}
+
+.infinite-scroll-con {
+  display: grid;
+
+  margin: 1em;
+
+  gap: 8px;
+
+  grid-template-columns: repeat(2, 1fr);
+}
