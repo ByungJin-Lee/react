@@ -3,6 +3,7 @@ import './App.css'
 import React from 'react'
 import InfiniteBoard from './components/InfiniteBoard'
 import AFKWatcher from './components/AFKWatcher'
+import ISBoard from './components/ISBoard'
 
 function App() {
 
@@ -17,8 +18,9 @@ function App() {
 
   return (
     <div className="app">
-      <AFKWatcher waitSecond={10} callbackAwake={callbackAwake} callbackOver={callbackOver} />
-      <InfiniteBoard />
+      {/* <AFKWatcher waitSecond={10} callbackAwake={callbackAwake} callbackOver={callbackOver} /> */}
+      {/* <InfiniteBoard /> */}
+      <ISBoard />
     </div>
   )
 }
