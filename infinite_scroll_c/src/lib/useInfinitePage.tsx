@@ -2,21 +2,20 @@ import { useEffect, useState } from "react";
 
 //#region Interface
 
-interface Context<T, B> {
-  _status: Status,
-  _pages: T[],
-  status: Status;
+export interface Context<T, B> {
   pages: T[];
+  status: Status;
   lastPage: T | undefined;
+  /** Don't use variable out of this hook. This variable only used in hook. */
+  blocked: boolean;
+  /** additional information for hook */
   bundle?: B;
-  /**
-   * Need to override for hook work.
-   */
+  /** Need to override for hook work. */
   operator: Operator<T, B>;
   plugins: Plugin<T, B>[];
 }
 
-interface Operator<T, B> {
+export interface Operator<T, B> {
   /**
    * Calculate Next Page Cursor.
    * If there is next cursor, then return number.
@@ -32,23 +31,19 @@ interface Operator<T, B> {
   fetchNextPage(nextCursor?: number, bundle?: B): Promise<T>;
 }
 
-interface Hook<T> {
-  setPages : React.Dispatch<React.SetStateAction<T[]>>
-}
-
-interface Control<T, B> {
+export interface Control<T, B> {
   pages: T[];
   status: Status;
   bundle?: B;
   isNextPage(): boolean;
-  goNextPage(): Promise<void>;
+  goNextPage(): Promise<boolean>;
   getCurrentCursor(): number | undefined;
 }
 
-type Plugin<T, B> 
-  = (context: Readonly<Context<T, B>>, commingData: T) => T;
+/** Is better readonly Context? */
+export type Plugin<T, B> = (context: Context<T, B>, commingData: T) => T;
 
-type Status = 'loading' | 'done';
+export type Status = 'loading' | 'done';
 
 //#endregion
 
@@ -62,8 +57,7 @@ function generateContext<T, B>(
   const [_status, _setStatus] = useState<Status>('done');
 
   const context : Context<T, B> = {
-    _status, // Default Status
-    _pages, // Empty Pages
+    blocked: false,
     bundle,
     plugins,
     operator,
@@ -84,9 +78,6 @@ function generateContext<T, B>(
     },
     //#endregion
     //#region LastPage
-    get lastPage() {
-      return _pages[_pages.length - 1];
-    },
     set lastPage(value: T) {
       _setPages(prev => {
         prev.push(value);
@@ -100,8 +91,6 @@ function generateContext<T, B>(
 }
 
 function generateControl<T, B>(context: Context<T,B>) {
-
-
 
   const control : Control<T,B> = {
     pages: context.pages,
@@ -120,6 +109,9 @@ function generateControl<T, B>(context: Context<T,B>) {
      */
     async goNextPage() {
 
+      // Already fetch then stop.
+      if(context.blocked) return false;
+
       const nextCursor = context.pages.length > 0 
         ? context.operator.getNextCursor(
             context.pages,
@@ -129,9 +121,10 @@ function generateControl<T, B>(context: Context<T,B>) {
 
       // set Status - loading
       context.status = 'loading';
+      context.blocked = true;
 
       // get data using fetch
-      const commingData = await context.operator.fetchNextPage(nextCursor);
+      const commingData = await context.operator.fetchNextPage(nextCursor, context.bundle);
 
       // process plugin like middleware.
       let processed = commingData as T;
@@ -140,13 +133,16 @@ function generateControl<T, B>(context: Context<T,B>) {
         processed = plugin(context, processed);
         if(processed == undefined) break;
       }
-      
-      // set Status - done
-      context.status = 'done';
 
       if(processed != undefined) {
         context.lastPage = processed;
       }
+      
+      // set Status - done
+      context.status = 'done';
+      context.blocked = false;
+
+      return true;
     },
 
     getCurrentCursor() {

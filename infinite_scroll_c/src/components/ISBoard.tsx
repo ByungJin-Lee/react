@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getScrollDispatcher } from "../lib/tools";
-import useInfinitePage from "../lib/useInfinitePage";
+import useInfinitePage, { Context } from "../lib/useInfinitePage";
 
 interface Page {
   total_count: number,
@@ -8,21 +8,26 @@ interface Page {
 }
 
 interface Bundle {
-
+  per: number
 }
 
 function getNextCursor(pages: Page[], bundle: Bundle) {
   const expect = pages.length + 1;
-  const limit = Math.ceil(pages[pages.length-1].total_count / 30);
+  const limit = Math.ceil(pages[pages.length-1].total_count / bundle.per);
 
   return limit > expect ? expect : undefined;
 }
 
-async function fetchNextPage(nextCursor = 1, bundle : Bundle = {}) {
-  const response = await fetch(`https://api.github.com/search/repositories?q=topic:reactjs&per_page=30&page=${nextCursor}`);
+async function fetchNextPage(nextCursor = 1, bundle : Bundle) {
+  const response = await fetch(`https://api.github.com/search/repositories?q=topic:reactjs&per_page=${bundle.per}&page=${nextCursor}`);
   if(response.status != 200) throw Error("error");
 
   return await response.json() as Page;
+}
+
+function logPlugin(context: Context<Page, Bundle>, comming: Page) {
+  console.log(context.bundle, comming);
+  return comming;
 }
 
 export default function ISBoard() {
@@ -34,24 +39,17 @@ export default function ISBoard() {
     getCurrentCursor,
     isNextPage
   } = useInfinitePage<Page, Bundle>(
-    {
-      getNextCursor,
-      fetchNextPage
-    },
-    [
-      (context, comming) => {
-        console.log(context, comming);
-        return comming;
-      }
-    ]
+    { getNextCursor, fetchNextPage },
+    [logPlugin],
+    { per: 30 }
   );
 
   useEffect(() => {
 
     const [installEvent, uninstallEvent] = 
-      getScrollDispatcher(100, ()=>{
-        if(isNextPage()){
-          goNextPage();
+      getScrollDispatcher(100, async ()=>{
+        if(isNextPage() && await goNextPage()){
+          console.log(getCurrentCursor());
         }
       });
 
