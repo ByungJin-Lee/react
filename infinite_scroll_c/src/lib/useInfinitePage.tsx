@@ -1,24 +1,22 @@
 import { useEffect, useState } from "react";
 
+//#region Interface
+
 interface Context<T, B> {
-  currentCursor: number;
+  _status: Status,
+  _pages: T[],
   status: Status;
   pages: T[];
+  lastPage: T | undefined;
   bundle?: B;
-  hooks: Hooks<T>;
   /**
    * Need to override for hook work.
    */
-  operator: Operator<T>;
+  operator: Operator<T, B>;
   plugins: Plugin<T, B>[];
 }
 
-interface Hooks<T> {
-  setPages: React.Dispatch<React.SetStateAction<T[]>>;
-  setStatus: React.Dispatch<React.SetStateAction<Status>>;
-}
-
-interface Operator<T> {
+interface Operator<T, B> {
   /**
    * Calculate Next Page Cursor.
    * If there is next cursor, then return number.
@@ -26,12 +24,16 @@ interface Operator<T> {
    * @param lastPage 
    * @param totalPages 
    */
-  getNextCursor(lastPage: T, totalPages?: T[]): number | undefined;
+  getNextCursor(pages: T[], bundle?: B): number | undefined;
   /**
    * Fetch Next Page.
    * @param nextCursor the cursor that was calculated by 'getNextCursor'.
    */
-  fetchNextPage(nextCursor?: number): Promise<T>;
+  fetchNextPage(nextCursor?: number, bundle?: B): Promise<T>;
+}
+
+interface Hook<T> {
+  setPages : React.Dispatch<React.SetStateAction<T[]>>
 }
 
 interface Control<T, B> {
@@ -48,26 +50,50 @@ type Plugin<T, B>
 
 type Status = 'loading' | 'done';
 
+//#endregion
+
 function generateContext<T, B>(
-  operator: Operator<T>,
+  operator: Operator<T, B>,
   plugins: Plugin<T, B>[],
   bundle: B | undefined
 ) {
 
-  const [pages, setPages] = useState<T[]>([]);
-  const [status, setStatus] = useState<Status>('done');
+  const [_pages, _setPages] = useState<T[]>([]);
+  const [_status, _setStatus] = useState<Status>('done');
 
   const context : Context<T, B> = {
-    currentCursor: -1,
-    status,
-    pages,
+    _status, // Default Status
+    _pages, // Empty Pages
     bundle,
     plugins,
     operator,
-    hooks: {
-      setPages,
-      setStatus,
+    //#region Status
+    get status() {
+      return _status;
+    },
+    set status(value: Status) {
+      _setStatus(value);
+    },
+    //#endregion
+    //#region Pages
+    get pages() {
+      return _pages;
+    },
+    set pages(values: T[]) {
+      _setPages(values);
+    },
+    //#endregion
+    //#region LastPage
+    get lastPage() {
+      return _pages[_pages.length - 1];
+    },
+    set lastPage(value: T) {
+      _setPages(prev => {
+        prev.push(value);
+        return prev;
+      })
     }
+    //#endregion
   }
   
   return context;
@@ -76,16 +102,18 @@ function generateContext<T, B>(
 function generateControl<T, B>(context: Context<T,B>) {
 
 
+
   const control : Control<T,B> = {
     pages: context.pages,
     status: context.status,
     bundle: context.bundle,
 
     isNextPage() {
-      return context.operator.getNextCursor(
-        context.pages[context.pages.length - 1],
-        context.pages
-      ) != undefined;
+      return context.pages.length > 0 
+        && context.operator.getNextCursor(
+          context.pages,
+          context.bundle
+        ) != undefined;
     },
     /**
      * Before call this function, you must check that Next Cursor is exist? (isNextPage)
@@ -94,13 +122,13 @@ function generateControl<T, B>(context: Context<T,B>) {
 
       const nextCursor = context.pages.length > 0 
         ? context.operator.getNextCursor(
-            context.pages[context.pages.length - 1],
-            context.pages
+            context.pages,
+            context.bundle
           )
         : undefined;
 
       // set Status - loading
-      context.hooks.setStatus('loading');
+      context.status = 'loading';
 
       // get data using fetch
       const commingData = await context.operator.fetchNextPage(nextCursor);
@@ -112,22 +140,17 @@ function generateControl<T, B>(context: Context<T,B>) {
         processed = plugin(context, processed);
         if(processed == undefined) break;
       }
-
-      if(processed) {
-        context.hooks.setPages(prev=>{
-          prev.push(processed);
-          return prev;
-        })
-      }
-
+      
       // set Status - done
-      context.hooks.setStatus('done');
+      context.status = 'done';
 
-      if(nextCursor) context.currentCursor = nextCursor;
+      if(processed != undefined) {
+        context.lastPage = processed;
+      }
     },
 
     getCurrentCursor() {
-      return context.currentCursor;
+      return context.pages.length;
     }
   };
 
@@ -136,7 +159,7 @@ function generateControl<T, B>(context: Context<T,B>) {
 
 
 export default function useInfinitePage<T, B>(
-  operator: Operator<T>,
+  operator: Operator<T, B>,
   plugins: Plugin<T,B>[],
   initialBundle?: B
 ) {
