@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 
-type Status = 'loading' | 'done';
-
 interface Context<T, B> {
   currentCursor: number;
   status: Status;
@@ -36,9 +34,6 @@ interface Operator<T> {
   fetchNextPage(nextCursor?: number): Promise<T>;
 }
 
-type Plugin<T, B> 
-  = (context: Readonly<Context<T, B>>, commingData: T) => T;
-
 interface Control<T, B> {
   pages: T[];
   status: Status;
@@ -47,6 +42,11 @@ interface Control<T, B> {
   goNextPage(): Promise<void>;
   getCurrentCursor(): number | undefined;
 }
+
+type Plugin<T, B> 
+  = (context: Readonly<Context<T, B>>, commingData: T) => T;
+
+type Status = 'loading' | 'done';
 
 function generateContext<T, B>(
   operator: Operator<T>,
@@ -106,13 +106,19 @@ function generateControl<T, B>(context: Context<T,B>) {
       const commingData = await context.operator.fetchNextPage(nextCursor);
 
       // process plugin like middleware.
-      context.plugins.forEach(plugin => {
-        const processed = plugin(context, commingData);
-        context.hooks.setPages(prev => {
+      let processed = commingData as T;
+
+      for (const plugin of context.plugins) {
+        processed = plugin(context, processed);
+        if(processed == undefined) break;
+      }
+
+      if(processed) {
+        context.hooks.setPages(prev=>{
           prev.push(processed);
           return prev;
-        });
-      });
+        })
+      }
 
       // set Status - done
       context.hooks.setStatus('done');
