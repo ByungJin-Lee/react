@@ -1,18 +1,90 @@
 import { useEffect, useState } from "react";
 
-//#region Interface
+export class Context<T, B> {
+  //#region State
+  private _setPages: React.Dispatch<React.SetStateAction<T[]>>;
+  private _setStatus: React.Dispatch<React.SetStateAction<Status>>;
+  private _pages: T[];
+  private _status: Status;
+  //#endregion
 
-export interface Context<T, B> {
-  pages: T[];
-  status: Status;
-  lastPage: T | undefined;
-  /** Don't use variable out of this hook. This variable only used in hook. */
-  blocked: boolean;
-  /** additional information for hook */
-  bundle?: B;
-  /** Need to override for hook work. */
-  operator: Operator<T, B>;
-  plugins: Plugin<T, B>[];
+  private blocked: boolean;
+  public readonly bundle?: B;
+  private readonly plugins: Plugin<T, B>[];
+  private readonly operator: Operator<T,B>;
+
+  constructor(
+    operator: Operator<T, B>, 
+    plugins: Plugin<T,B>[],
+    bundle?: B
+  ) {
+    [this._pages, this._setPages] = useState<T[]>([]);
+    [this._status, this._setStatus] = useState<Status>('done');
+    this.operator = operator;
+    this.plugins = plugins;
+    this.bundle = bundle;
+    this.blocked = false;
+  }
+
+  processWithPlugin(comming: T) {
+    let processed : T = comming;
+    for (const plugin of this.plugins) {
+      if((processed = plugin(this, processed)) == undefined) break;
+    }
+    return processed;
+  }
+
+  block() {
+    this.blocked = true;
+    this.status='loading';
+  }
+  unblock() {
+    this.blocked = false;
+    this.status = 'done';
+  }
+  isBlocked() {
+    return this.blocked;
+  }
+
+  get nextCursor() {
+    if(this.pages.length > 0){
+      return this.operator.getNextCursor(
+        this.pages,
+        this.bundle
+      );
+    }
+    return undefined;
+  }
+
+  fetchNextPage() {
+    return this.operator.fetchNextPage(this.nextCursor, this.bundle);
+  }
+
+  //#region Getter/Setter
+  get pages() : T[] {
+    return this._pages;
+  }
+  /**
+   * If value type is array, then assign or not append.
+   */
+  set pages(value: T[] | T) {
+    if(Array.isArray(value)){
+      this._setPages(value);
+    }else{
+      this._setPages(prev=>{
+        prev.push(value);
+        return prev;
+      });
+    }
+  }
+
+  get status() {
+    return this._status;
+  }
+  set status(value: Status) {
+    this._setStatus(value);
+  }
+  //#endregion
 }
 
 export interface Operator<T, B> {
@@ -31,127 +103,46 @@ export interface Operator<T, B> {
   fetchNextPage(nextCursor?: number, bundle?: B): Promise<T>;
 }
 
-export interface Control<T, B> {
-  pages: T[];
-  status: Status;
-  bundle?: B;
-  isNextPage(): boolean;
-  goNextPage(): Promise<boolean>;
-  getCurrentCursor(): number | undefined;
-}
-
 /** Is better readonly Context? */
 export type Plugin<T, B> = (context: Context<T, B>, commingData: T) => T;
 
 export type Status = 'loading' | 'done';
 
-//#endregion
-
-function generateContext<T, B>(
-  operator: Operator<T, B>,
-  plugins: Plugin<T, B>[],
-  bundle: B | undefined
-) {
-
-  const [_pages, _setPages] = useState<T[]>([]);
-  const [_status, _setStatus] = useState<Status>('done');
-
-  const context : Context<T, B> = {
-    blocked: false,
-    bundle,
-    plugins,
-    operator,
-    //#region Status
-    get status() {
-      return _status;
-    },
-    set status(value: Status) {
-      _setStatus(value);
-    },
-    //#endregion
-    //#region Pages
+function handleFromContext<T,B>(context: Context<T,B>) {
+  return {
     get pages() {
-      return _pages;
+      return context.pages;
     },
-    set pages(values: T[]) {
-      _setPages(values);
+    get status() {
+      return context.status;
     },
-    //#endregion
-    //#region LastPage
-    set lastPage(value: T) {
-      _setPages(prev => {
-        prev.push(value);
-        return prev;
-      })
-    }
-    //#endregion
-  }
-  
-  return context;
-}
-
-function generateControl<T, B>(context: Context<T,B>) {
-
-  const control : Control<T,B> = {
-    pages: context.pages,
-    status: context.status,
-    bundle: context.bundle,
-
-    isNextPage() {
-      return context.pages.length > 0 
-        && context.operator.getNextCursor(
-          context.pages,
-          context.bundle
-        ) != undefined;
-    },
-    /**
-     * Before call this function, you must check that Next Cursor is exist? (isNextPage)
-     */
-    async goNextPage() {
-
-      // Already fetch then stop.
-      if(context.blocked) return false;
-
-      const nextCursor = context.pages.length > 0 
-        ? context.operator.getNextCursor(
-            context.pages,
-            context.bundle
-          )
-        : undefined;
-
-      // set Status - loading
-      context.status = 'loading';
-      context.blocked = true;
-
-      // get data using fetch
-      const commingData = await context.operator.fetchNextPage(nextCursor, context.bundle);
-
-      // process plugin like middleware.
-      let processed = commingData as T;
-
-      for (const plugin of context.plugins) {
-        processed = plugin(context, processed);
-        if(processed == undefined) break;
-      }
-
-      if(processed != undefined) {
-        context.lastPage = processed;
-      }
-      
-      // set Status - done
-      context.status = 'done';
-      context.blocked = false;
-
-      return true;
-    },
-
     getCurrentCursor() {
       return context.pages.length;
+    },
+    isNext() {
+      return context.nextCursor != undefined;
+    },
+    async fetchNext() {
+      // Already fetch then stop.
+      if(context.isBlocked()) return false;
+      // set Status - loading
+      context.block();
+      // get data using fetch
+      const commingData = await context.fetchNextPage();
+  
+      if(commingData) {
+        // process plugin like middleware.
+        const processed = context.processWithPlugin(commingData);
+        if(processed) context.pages = processed;
+        // set Status - done
+        context.unblock();
+        return true;
+      }
+      return false;
     }
-  };
-
-  return control;
+  }
 }
+//#endregion
 
 
 export default function useInfinitePage<T, B>(
@@ -160,18 +151,13 @@ export default function useInfinitePage<T, B>(
   initialBundle?: B
 ) {
 
-  const context = generateContext<T,B>(
-    operator,
-    plugins,
-    initialBundle
-  );
-
-  const control = generateControl<T,B>(context);
+  const context = new Context<T,B>(operator, plugins, initialBundle);
+  const control = handleFromContext<T,B>(context);
 
   useEffect(()=> {
-    control.goNextPage();
+    // get first page;
+    control.fetchNext();
   }, []);
-  // get first page;
   
   return control;
 }
