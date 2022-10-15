@@ -26,7 +26,7 @@ async function fetchNextPage(nextCursor = 1, bundle : Bundle) {
 }
 
 function logPlugin(context: Context<Page, Bundle>, comming: Page) {
-  console.log(context);
+  // console.log(context);
   return comming;
 }
 
@@ -45,6 +45,8 @@ export default function ISBoard() {
   );
 
   useEffect(() => {
+
+    fetchNext();
 
     const [installEvent, uninstallEvent] = 
       getScrollDispatcher(100, async ()=>{
